@@ -21,6 +21,7 @@ export const userRoleEnum = pgEnum("user_role", [
 export const claimStatusEnum = pgEnum("claim_status", [
   "intake",
   "triage",
+  "assessment",
   "investigating",
   "approved",
   "denied",
@@ -226,7 +227,15 @@ export const documents = pgTable("documents", {
     .notNull()
     .references(() => claims.id),
   fileKey: varchar("file_key", { length: 512 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileUrl: text("file_url").notNull(),
   docType: documentTypeEnum("doc_type").notNull(),
+  uploadedById: uuid("uploaded_by_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const auditLogs = pgTable("audit_logs", {

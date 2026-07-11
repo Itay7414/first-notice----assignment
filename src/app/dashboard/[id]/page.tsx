@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { getDepreciationRate } from "@/lib/depreciation-rates";
 import { calculateACV, formatAgorot } from "@/lib/money";
+import { UploadButton } from "@/lib/uploadthing";
 import { trpc } from "@/trpc/react";
 
 export default function ClaimDetailsPage() {
@@ -45,6 +46,17 @@ export default function ClaimDetailsPage() {
       setActionError(null);
       // Refetch so the UI (status, version, and anything derived from them)
       // reflects the server's new state instantly.
+      utils.claim.getClaim.invalidate({ claimId: id });
+      utils.claim.getClaims.invalidate();
+    },
+    onError: (err) => {
+      setActionError(err.message);
+    },
+  });
+
+  const assessClaim = trpc.claim.assessClaim.useMutation({
+    onSuccess: () => {
+      setActionError(null);
       utils.claim.getClaim.invalidate({ claimId: id });
       utils.claim.getClaims.invalidate();
     },
@@ -177,6 +189,51 @@ export default function ClaimDetailsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Documents</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {claim.documents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No documents attached yet.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {claim.documents.map((document) => (
+                <li
+                  key={document.id}
+                  className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                >
+                  <a
+                    href={document.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate underline hover:no-underline"
+                  >
+                    {document.fileName}
+                  </a>
+                  <span className="ml-3 shrink-0 text-xs text-muted-foreground capitalize">
+                    {document.docType}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <UploadButton
+            endpoint="claimDocumentUploader"
+            input={{ claimId: claim.id }}
+            onClientUploadComplete={() => {
+              utils.claim.getClaim.invalidate({ claimId: id });
+            }}
+            onUploadError={(uploadError) => {
+              setActionError(uploadError.message);
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Audit Trail</CardTitle>
         </CardHeader>
         <CardContent>
@@ -210,7 +267,22 @@ export default function ClaimDetailsPage() {
             </Button>
           )}
 
-          {claim.status !== "intake" && !actionError && (
+          {claim.status === "triage" && (
+            <Button
+              size="sm"
+              disabled={assessClaim.isPending}
+              onClick={() =>
+                assessClaim.mutate({
+                  claimId: claim.id,
+                  version: claim.version,
+                })
+              }
+            >
+              {assessClaim.isPending ? "Starting…" : "Begin Assessment"}
+            </Button>
+          )}
+
+          {claim.status !== "intake" && claim.status !== "triage" && !actionError && (
             <p className="text-sm text-muted-foreground">
               No actions available from status &quot;{claim.status}&quot;
               yet.

@@ -22,6 +22,13 @@
       "when": 1783811795062,
       "tag": "0002_glamorous_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783812583852,
+      "tag": "0003_keen_maestro",
+      "breakpoints": true
     }
   ]
 }
