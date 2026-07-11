@@ -1,0 +1,8 @@
+We successfully verified that the tRPC middleware correctly blocks unauthorized requests with a 401 error. Let's make two updates now:
+In src/app/dashboard/page.tsx, wrap the tRPC call or check the error state properly so that if a user is not logged in, instead of crashing with a console error, it displays a clean typography message: 'Access Denied: Please sign in to view the claims dashboard.'
+Now, let's build the detailed claim view page at src/app/dashboard/[id]/page.tsx as a client component that reads the id from the URL params and calls trpc.claim.getClaim.useQuery({ id }).
+Display the claim overview using shadcn/ui Cards: Claim Reference, Current Status, Currency, Date of Loss, and the current Version (for optimistic concurrency).
+Create a table to display the claim items. For each item, display: Item ID, Category, Age (Months), and Claimed Amount (RCV).
+Implement the core financial math from FR-3.1: Create a utility file src/lib/money.ts and write a pure, deterministic function calculateACV that takes an item's RCV, age, and annual depreciation basis points (bps). It must use integer minor units (agorot) ONLY, apply round-half-up, cap depreciation at the replacement cost, and floor ACV at 0.
+Integrate this utility into the claim details page so we can display the calculated Depreciation and final ACV for each item on the screen.
+Add placeholder sections for 'Audit Trail' and 'Actions' so we can build the state-machine buttons there next.

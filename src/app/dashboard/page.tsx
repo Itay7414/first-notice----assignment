@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AccessDenied } from "@/components/access-denied";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,7 +17,14 @@ import { trpc } from "@/trpc/react";
 
 export default function DashboardPage() {
   const { data: claims, isLoading, isError, error } =
-    trpc.claim.getClaims.useQuery();
+    trpc.claim.getClaims.useQuery(undefined, {
+      // A 401 won't resolve itself by retrying; fail fast so we can show
+      // the "Access Denied" state instead of retrying silently 3x.
+      retry: (failureCount, err) =>
+        err.data?.code !== "UNAUTHORIZED" && failureCount < 3,
+    });
+
+  const isUnauthorized = isError && error.data?.code === "UNAUTHORIZED";
 
   return (
     <div className="mx-auto w-full max-w-5xl p-6">
@@ -29,7 +37,9 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground">Loading claims…</p>
           )}
 
-          {isError && (
+          {isUnauthorized && <AccessDenied />}
+
+          {isError && !isUnauthorized && (
             <p className="text-sm text-destructive">
               Failed to load claims: {error.message}
             </p>
