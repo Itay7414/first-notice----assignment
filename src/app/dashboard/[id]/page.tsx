@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { AccessDenied } from "@/components/access-denied";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -22,6 +24,8 @@ import { trpc } from "@/trpc/react";
 
 export default function ClaimDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const utils = trpc.useUtils();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const {
     data: claim,
@@ -35,6 +39,19 @@ export default function ClaimDetailsPage() {
         err.data?.code !== "UNAUTHORIZED" && failureCount < 3,
     },
   );
+
+  const triageClaim = trpc.claim.triageClaim.useMutation({
+    onSuccess: () => {
+      setActionError(null);
+      // Refetch so the UI (status, version, and anything derived from them)
+      // reflects the server's new state instantly.
+      utils.claim.getClaim.invalidate({ claimId: id });
+      utils.claim.getClaims.invalidate();
+    },
+    onError: (err) => {
+      setActionError(err.message);
+    },
+  });
 
   const isUnauthorized = isError && error.data?.code === "UNAUTHORIZED";
   const isNotFound = isError && error.data?.code === "NOT_FOUND";
@@ -173,10 +190,32 @@ export default function ClaimDetailsPage() {
         <CardHeader>
           <CardTitle>Actions</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            State-machine action buttons coming soon.
-          </p>
+        <CardContent className="flex flex-col gap-3">
+          {actionError && (
+            <p className="text-sm text-destructive">{actionError}</p>
+          )}
+
+          {claim.status === "intake" && (
+            <Button
+              size="sm"
+              disabled={triageClaim.isPending}
+              onClick={() =>
+                triageClaim.mutate({
+                  claimId: claim.id,
+                  version: claim.version,
+                })
+              }
+            >
+              {triageClaim.isPending ? "Triaging…" : "Triage Claim"}
+            </Button>
+          )}
+
+          {claim.status !== "intake" && !actionError && (
+            <p className="text-sm text-muted-foreground">
+              No actions available from status &quot;{claim.status}&quot;
+              yet.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

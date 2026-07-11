@@ -1,0 +1,6 @@
+We successfully implemented and verified the ACV math and the details layout. Now, let's make it possible to actually log in and interact with the data.
+Create a simple Sign-In page at src/app/login/page.tsx using shadcn/ui Card, Input, and Button. It should allow logging in using email and password via the Better Auth client utilities.
+Add a 'Sign Out' button in a shared navigation header or directly on the dashboard page so we can switch between roles easily.
+Now let's implement the first interactive transition button on the claim details page (src/app/dashboard/[id]/page.tsx): The Triage Button.
+This button should only appear if the claim's current status is 'intake'. When clicked, it must call the trpc.claim.triageClaim mutation.
+Make sure to handle the optimistic concurrency version update properly, and refresh the query data upon success so the UI instantly updates to 'triage'.

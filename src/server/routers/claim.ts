@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { claims } from "@/db/schema";
 import { protectedProcedure, router } from "../trpc";
@@ -18,6 +18,9 @@ const createClaimInput = z.object({
 
 const triageClaimInput = z.object({
   claimId: z.string().uuid(),
+  // The version the client last saw, for optimistic concurrency: the write
+  // is rejected if someone else has updated the claim in the meantime.
+  version: z.number().int().positive(),
 });
 
 export const claimRouter = router({
@@ -96,11 +99,24 @@ export const claimRouter = router({
         });
       }
 
+      // Optimistic concurrency: only apply the write if the row's version
+      // still matches what the client last read. If another request won
+      // the race in between, this affects 0 rows.
       const [updated] = await ctx.db
         .update(claims)
         .set({ status: "triage", version: claim.version + 1 })
-        .where(eq(claims.id, input.claimId))
+        .where(
+          and(eq(claims.id, input.claimId), eq(claims.version, input.version)),
+        )
         .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "This claim was updated by someone else in the meantime. Please refresh and try again.",
+        });
+      }
 
       return updated;
     }),
