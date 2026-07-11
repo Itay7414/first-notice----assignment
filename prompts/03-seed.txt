@@ -1,0 +1,9 @@
+Now let's create a seed script to populate our database with sample data.
+Create a file src/db/seed.ts using the Drizzle db instance.
+The script should:
+Create 3 users: a 'supervisor' (Dana Cohen), an 'adjuster' (Avi Levi), and a 'claimant' (Noa Mizrahi).
+Create a sample policy with: deductible 50000, perOccurrenceLimit 1200000.
+Create one claim (CLM-2026-0007) with 3 items (electronics, furniture, appliance) as defined in the assignment example.
+Ensure we use the proper enums for roles and claim statuses.
+After writing it, add a script to package.json called 'db:seed' that runs this file using tsx src/db/seed.ts (install tsx as a dev dependency if needed).
+Finally, run the seed script via terminal.

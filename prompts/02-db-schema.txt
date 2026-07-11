@@ -1,0 +1,13 @@
+Let's set up the Drizzle ORM schema and database connection for our claims app. We are using Neon Postgres.
+First, install the missing neon package: npm install @neondatabase/serverless dotenv.
+Then, create a file src/db/schema.ts with the following tables, strictly following these rules (ALL money fields must be integers/agorot, no floats):
+users: id, name, email, role (pgEnum: 'claimant', 'adjuster', 'supervisor').
+claims: id, claimant_id, policy_number, currency (default 'ILS'), date_of_loss, status (pgEnum: 'intake', 'triage', 'investigating', 'approved', 'denied', 'paid', 'closed', 'reopened', 'withdrawn'), version (integer, default 1, for optimistic concurrency), settled_at (timestamp, nullable - to enforce single settlement).
+claim_items: id, claim_id, category, age_months, claimed_agorot (integer).
+reserves: id, claim_id, amount_agorot (integer), created_at. (append-only history).
+payments: id, claim_id, amount_agorot (integer), idempotency_key (varchar). Add a unique constraint on (claim_id, idempotency_key).
+recoveries: id, claim_id, amount_agorot (integer), created_at. (for subrogation).
+documents: id, claim_id, file_key, doc_type (pgEnum: 'police_report', 'damage_photo', 'repair_invoice', 'repair_proof', 'other').
+audit_logs: id, claim_id, actor_id, action, reason, created_at.
+Next, create src/db/index.ts to export the initialized drizzle db using @neondatabase/serverless.
+Finally, create drizzle.config.ts in the root to point to my DATABASE_URL for migrations.

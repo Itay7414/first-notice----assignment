@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { claims } from "@/db/schema";
 import { protectedProcedure, router } from "../trpc";
@@ -21,6 +21,24 @@ const triageClaimInput = z.object({
 });
 
 export const claimRouter = router({
+  // Claimants only ever see their own claims; every other role (adjuster,
+  // supervisor) sees the full claim list.
+  getClaims: protectedProcedure.query(async ({ ctx }) => {
+    const { user } = ctx.session;
+
+    const rows =
+      user.role === "claimant"
+        ? await ctx.db.query.claims.findMany({
+            where: eq(claims.claimantId, user.id),
+            orderBy: desc(claims.dateOfLoss),
+          })
+        : await ctx.db.query.claims.findMany({
+            orderBy: desc(claims.dateOfLoss),
+          });
+
+    return rows;
+  }),
+
   getClaim: protectedProcedure
     .input(getClaimInput)
     .query(async ({ ctx, input }) => {

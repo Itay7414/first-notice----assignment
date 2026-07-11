@@ -1,0 +1,8 @@
+Let's set up tRPC for our application to handle state transitions.
+Initialize tRPC in a new file src/server/trpc.ts.
+Create the main router in src/server/routers/claim.ts.
+Implement the getClaim query (fetches a claim by ID with its items).
+Implement a protected createClaim mutation.
+Implement the first state transition mutation: triageClaim. It should accept a claimId, validate it using a Zod schema, and update the status to 'triage'.
+IMPORTANT: Ensure every procedure is protected by a middleware that checks for user authentication (using better-auth context). If the user is not logged in, throw a TRPCError({ code: 'UNAUTHORIZED' }).
+Please also create the tRPC client setup in src/trpc/react.tsx so we can use it in our client components

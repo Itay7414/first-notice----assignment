@@ -1,0 +1,1 @@
+set up a new next.js app in the current directory with typescript, tailwind, and app router. don't create a new subfolder, just init it right here. after it's done, install these packages: drizzle-orm, zod, @uploadthing/react, uploadthing, and better-auth. also add drizzle-kit as a dev dependency. finally, create two empty folders in the root called 'docs' and 'prompts'.

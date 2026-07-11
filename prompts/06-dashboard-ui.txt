@@ -1,0 +1,7 @@
+Let's build the main claims dashboard page at src/app/dashboard/page.tsx.
+Use shadcn/ui components (Table, Card) to list all claims.
+Use our tRPC claim.getClaims procedure (you'll need to create this procedure first in src/server/routers/claim.ts to fetch all claims for the current user's role).
+For the 'adjuster' role, show all claims in the system. For 'claimant', show only claims where claimantId matches their Better Auth session ID.
+Display columns: Claim Ref, Date of Loss, Status, and a 'View' link that goes to /dashboard/[id].
+Add a simple loading state and error state.
+Since we are using shadcn, please install the necessary components first: npx shadcn@latest add table card button.
