@@ -1,0 +1,2 @@
+One more quick UX addition while you are working on this page: Please add a 'Back to Dashboard' button or link at the top of the claim details page (above the Claim reference card).
+You can style it cleanly using shadcn's buttonVariants({ variant: "ghost" }) or variant: "outline" and include a small left arrow icon (like Lucide's ArrowLeft) so users can easily navigate back to /dashboard without having to click the logo.

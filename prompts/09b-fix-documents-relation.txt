@@ -1,0 +1,2 @@
+I see a runtime error on the claim details page: Failed to load claim: There is not enough information to infer relation 'claims.documents'.
+Please update src/db/schema.ts to include the explicit documentsRelations (and ensure claimsRelations is aware of it if necessary) so that Drizzle's relational query API can fetch a claim with: { documents: true }. After fixing the schema, make sure to run npx drizzle-kit push if any DB structural update is required.

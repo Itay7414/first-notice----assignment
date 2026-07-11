@@ -276,3 +276,17 @@ export const claimItemsRelations = relations(claimItems, ({ one }) => ({
     references: [claims.id],
   }),
 }));
+
+// Explicit relation is required here: `documents` has two foreign keys
+// (claimId -> claims, uploadedById -> users), so Drizzle can't unambiguously
+// infer the "one" side of `claimsRelations.documents` without this.
+export const documentsRelations = relations(documents, ({ one }) => ({
+  claim: one(claims, {
+    fields: [documents.claimId],
+    references: [claims.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [documents.uploadedById],
+    references: [users.id],
+  }),
+}));

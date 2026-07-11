@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { AccessDenied } from "@/components/access-denied";
-import { Button } from "@/components/ui/button";
+import { DocumentUploader } from "@/components/document-uploader";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -20,8 +23,20 @@ import {
 } from "@/components/ui/table";
 import { getDepreciationRate } from "@/lib/depreciation-rates";
 import { calculateACV, formatAgorot } from "@/lib/money";
-import { UploadButton } from "@/lib/uploadthing";
+import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/react";
+
+function BackToDashboardLink() {
+  return (
+    <Link
+      href="/dashboard"
+      className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "-ml-2 gap-1.5")}
+    >
+      <ArrowLeft className="size-4" />
+      Back to Dashboard
+    </Link>
+  );
+}
 
 export default function ClaimDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +85,8 @@ export default function ClaimDetailsPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6">
+        <BackToDashboardLink />
         <p className="text-sm text-muted-foreground">Loading claim…</p>
       </div>
     );
@@ -78,7 +94,8 @@ export default function ClaimDetailsPage() {
 
   if (isUnauthorized) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6">
+        <BackToDashboardLink />
         <AccessDenied message="Access Denied: Please sign in to view this claim." />
       </div>
     );
@@ -86,7 +103,8 @@ export default function ClaimDetailsPage() {
 
   if (isError) {
     return (
-      <div className="mx-auto w-full max-w-5xl p-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6">
+        <BackToDashboardLink />
         <p className="text-sm text-destructive">
           {isNotFound
             ? `Claim ${id} not found.`
@@ -102,6 +120,8 @@ export default function ClaimDetailsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
+      <BackToDashboardLink />
+
       <Card>
         <CardHeader>
           <CardTitle>Claim {claim.claimRef}</CardTitle>
@@ -219,14 +239,14 @@ export default function ClaimDetailsPage() {
             </ul>
           )}
 
-          <UploadButton
-            endpoint="claimDocumentUploader"
-            input={{ claimId: claim.id }}
-            onClientUploadComplete={() => {
+          <DocumentUploader
+            claimId={claim.id}
+            onUploadComplete={() => {
+              setActionError(null);
               utils.claim.getClaim.invalidate({ claimId: id });
             }}
-            onUploadError={(uploadError) => {
-              setActionError(uploadError.message);
+            onUploadError={(message) => {
+              setActionError(message);
             }}
           />
         </CardContent>

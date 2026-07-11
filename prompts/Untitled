@@ -1,7 +1,0 @@
-We successfully verified authentication and the intake -> triage transition. Now let's tackle the next state transition: Assessment, which requires file attachments (FR-2 & FR-10).
-Set up an UploadThing router in src/app/api/uploadthing/core.ts and the route handler in src/app/api/uploadthing/route.ts to allow uploading PDF and Image files.
-When a file is uploaded successfully, save it into our documents table using Drizzle, linked to the claimId.
-Create a claim.assessClaim mutation in src/server/routers/claim.ts. This mutation must transition the claim from triage to assessment.
-CRITICAL GUARD (FR-2): Inside the assessClaim mutation, query the documents table. If there are no documents attached to this claim yet, reject the request and throw a TRPCError({ code: 'BAD_REQUEST', message: 'Cannot transition to assessment without uploading required claim documentation.' }).
-On the claim details UI (src/app/dashboard/[id]/page.tsx), add an UploadThing button component so users can attach files, and list the attached files.
-Add the 'Begin Assessment' button, visible only when the status is triage. Wire it up to the new mutation with proper error handling to display the guard message if they haven't uploaded a file yet.
