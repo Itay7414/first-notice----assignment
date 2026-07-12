@@ -104,6 +104,7 @@ export const claimRouter = router({
         with: {
           items: true,
           documents: { orderBy: (doc, { desc }) => desc(doc.createdAt) },
+          policy: true,
         },
       });
 
@@ -159,5 +160,12 @@ export const claimRouter = router({
           });
         }
       }),
+    ),
+
+  // assessment -> investigating.
+  investigateClaim: protectedProcedure
+    .input(claimTransitionInput)
+    .mutation(async ({ ctx, input }) =>
+      transitionClaim(ctx.db, input, "assessment", "investigating"),
     ),
 });

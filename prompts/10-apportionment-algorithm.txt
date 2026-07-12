@@ -1,0 +1,10 @@
+Let's implement the core mathematical algorithm for resource apportionment (FR-3.2).
+In src/lib/money.ts, write a pure, deterministic function apportionLimit(items: { id: string; acv: bigint }[], limitAgorot: bigint).
+ALGORITHM REQUIREMENT (FR-3.2): If the sum of all item ACVs exceeds the limitAgorot, you must distribute the limit proportionally using the Largest-Remainder Method (Hamilton method) using integer arithmetic.
+First, calculate the baseline floor allocation for each item based on its integer share.
+Then, calculate the remainder fraction for each item.
+Distribute the remaining single agorot one-by-one to items with the largest remainder fractions.
+DETERMINISTIC TIE-BREAKER: If two items have the exact same remainder fraction, break the tie by sorting alphabetically by the item's id string.
+Create a comprehensive Vitest unit test file src/lib/money.test.ts to test calculateACV and apportionLimit. Include cases with exact matches, over-limit scaling, and identical remainders to prove the tie-breaker is fully deterministic.
+In src/server/routers/claim.ts, create the next state transition mutation: claim.investigateClaim. This transitions the claim from assessment to investigating.
+On the UI page (src/app/dashboard/[id]/page.tsx), display a new column or section showing the 'Apportioned Share' for each item using this logic if the total exceeds the limit, and add the 'Begin Investigation' button when the claim is in assessment status.

@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getDepreciationRate } from "@/lib/depreciation-rates";
-import { calculateACV, formatAgorot } from "@/lib/money";
+import { apportionLimit, calculateACV, formatAgorot } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/trpc/react";
 
@@ -80,6 +80,17 @@ export default function ClaimDetailsPage() {
     },
   });
 
+  const investigateClaim = trpc.claim.investigateClaim.useMutation({
+    onSuccess: () => {
+      setActionError(null);
+      utils.claim.getClaim.invalidate({ claimId: id });
+      utils.claim.getClaims.invalidate();
+    },
+    onError: (err) => {
+      setActionError(err.message);
+    },
+  });
+
   const isUnauthorized = isError && error.data?.code === "UNAUTHORIZED";
   const isNotFound = isError && error.data?.code === "NOT_FOUND";
 
@@ -117,6 +128,39 @@ export default function ClaimDetailsPage() {
   if (!claim) {
     return null;
   }
+
+  // FR-3.1: per-item ACV, computed once so it can feed both the table and
+  // the FR-3.2 apportionment below.
+  const itemsWithAcv = claim.items.map((item) => {
+    const { annualDepBps } = getDepreciationRate(item.category);
+    const { depreciationAgorot, acvAgorot } = calculateACV(
+      item.claimedAgorot,
+      item.ageMonths,
+      annualDepBps,
+    );
+    return { ...item, depreciationAgorot, acvAgorot };
+  });
+
+  const totalAcvAgorot = itemsWithAcv.reduce(
+    (sum, item) => sum + item.acvAgorot,
+    0,
+  );
+  const perOccurrenceLimitAgorot = claim.policy.perOccurrenceLimitAgorot;
+  const isOverLimit = totalAcvAgorot > perOccurrenceLimitAgorot;
+
+  // FR-3.2: only meaningful (and only shown) once the combined ACV actually
+  // exceeds the policy's per-occurrence limit.
+  const apportionedShareByItemId = isOverLimit
+    ? new Map(
+        apportionLimit(
+          itemsWithAcv.map((item) => ({
+            id: item.id,
+            acv: BigInt(item.acvAgorot),
+          })),
+          BigInt(perOccurrenceLimitAgorot),
+        ).map((share) => [share.id, Number(share.shareAgorot)]),
+      )
+    : null;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
@@ -156,7 +200,15 @@ export default function ClaimDetailsPage() {
         <CardHeader>
           <CardTitle>Claim Items</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
+          {isOverLimit && (
+            <p className="text-sm text-amber-600 dark:text-amber-500">
+              Total ACV ({formatAgorot(totalAcvAgorot)}) exceeds the policy&apos;s
+              per-occurrence limit ({formatAgorot(perOccurrenceLimitAgorot)}
+              ). The limit has been apportioned across items below (FR-3.2).
+            </p>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -168,40 +220,43 @@ export default function ClaimDetailsPage() {
                 </TableHead>
                 <TableHead className="text-right">Depreciation</TableHead>
                 <TableHead className="text-right">ACV</TableHead>
+                {isOverLimit && (
+                  <TableHead className="text-right">
+                    Apportioned Share
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {claim.items.map((item) => {
-                const { annualDepBps } = getDepreciationRate(item.category);
-                const { depreciationAgorot, acvAgorot } = calculateACV(
-                  item.claimedAgorot,
-                  item.ageMonths,
-                  annualDepBps,
-                );
-
-                return (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-mono text-xs">
-                      {item.id}
-                    </TableCell>
-                    <TableCell className="capitalize">
-                      {item.category}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.ageMonths}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatAgorot(item.claimedAgorot)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatAgorot(depreciationAgorot)}
-                    </TableCell>
+              {itemsWithAcv.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-mono text-xs">
+                    {item.id}
+                  </TableCell>
+                  <TableCell className="capitalize">
+                    {item.category}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {item.ageMonths}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatAgorot(item.claimedAgorot)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatAgorot(item.depreciationAgorot)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatAgorot(item.acvAgorot)}
+                  </TableCell>
+                  {isOverLimit && (
                     <TableCell className="text-right font-medium">
-                      {formatAgorot(acvAgorot)}
+                      {formatAgorot(
+                        apportionedShareByItemId?.get(item.id) ?? 0,
+                      )}
                     </TableCell>
-                  </TableRow>
-                );
-              })}
+                  )}
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </CardContent>
@@ -302,12 +357,30 @@ export default function ClaimDetailsPage() {
             </Button>
           )}
 
-          {claim.status !== "intake" && claim.status !== "triage" && !actionError && (
-            <p className="text-sm text-muted-foreground">
-              No actions available from status &quot;{claim.status}&quot;
-              yet.
-            </p>
+          {claim.status === "assessment" && (
+            <Button
+              size="sm"
+              disabled={investigateClaim.isPending}
+              onClick={() =>
+                investigateClaim.mutate({
+                  claimId: claim.id,
+                  version: claim.version,
+                })
+              }
+            >
+              {investigateClaim.isPending
+                ? "Starting…"
+                : "Begin Investigation"}
+            </Button>
           )}
+
+          {!["intake", "triage", "assessment"].includes(claim.status) &&
+            !actionError && (
+              <p className="text-sm text-muted-foreground">
+                No actions available from status &quot;{claim.status}&quot;
+                yet.
+              </p>
+            )}
         </CardContent>
       </Card>
     </div>
