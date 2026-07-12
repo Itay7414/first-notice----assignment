@@ -23,6 +23,7 @@ export const claimStatusEnum = pgEnum("claim_status", [
   "triage",
   "assessment",
   "investigating",
+  "settled",
   "approved",
   "denied",
   "paid",
@@ -288,5 +289,29 @@ export const documentsRelations = relations(documents, ({ one }) => ({
   uploadedBy: one(users, {
     fields: [documents.uploadedById],
     references: [users.id],
+  }),
+}));
+
+// Explicit "one" side for the FR-5/FR-7 ledger tables, mirroring
+// documentsRelations above, so `with: { reserves: true, payments: true,
+// recoveries: true }` resolves reliably from the `claims` side.
+export const reservesRelations = relations(reserves, ({ one }) => ({
+  claim: one(claims, {
+    fields: [reserves.claimId],
+    references: [claims.id],
+  }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  claim: one(claims, {
+    fields: [payments.claimId],
+    references: [claims.id],
+  }),
+}));
+
+export const recoveriesRelations = relations(recoveries, ({ one }) => ({
+  claim: one(claims, {
+    fields: [recoveries.claimId],
+    references: [claims.id],
   }),
 }));

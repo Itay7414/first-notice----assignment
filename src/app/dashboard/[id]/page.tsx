@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -13,6 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -21,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useSession } from "@/lib/auth-client";
 import { getDepreciationRate } from "@/lib/depreciation-rates";
 import { apportionLimit, calculateACV, formatAgorot } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -38,9 +41,113 @@ function BackToDashboardLink() {
   );
 }
 
+type TransactionType = "payment" | "recovery";
+
+function RecordTransactionForm({
+  isPending,
+  isSupervisor,
+  onSubmit,
+}: {
+  isPending: boolean;
+  isSupervisor: boolean;
+  onSubmit: (input: {
+    type: TransactionType;
+    amountAgorot: number;
+    idempotencyKey?: string;
+  }) => void;
+}) {
+  const [type, setType] = useState<TransactionType>("payment");
+  const [amount, setAmount] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const amountAgorot = Math.round(Number(amount) * 100);
+    if (!Number.isInteger(amountAgorot) || amountAgorot <= 0) return;
+
+    onSubmit({
+      type,
+      amountAgorot,
+      idempotencyKey: type === "payment" ? idempotencyKey : undefined,
+    });
+    setAmount("");
+    setIdempotencyKey("");
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-3 rounded-md border p-4"
+    >
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={type === "payment" ? "default" : "outline"}
+          onClick={() => setType("payment")}
+        >
+          Payment
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={type === "recovery" ? "default" : "outline"}
+          onClick={() => setType("recovery")}
+        >
+          Recovery
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tx-amount">Amount (ILS)</Label>
+          <Input
+            id="tx-amount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+          />
+        </div>
+
+        {type === "payment" && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="tx-idempotency-key">Idempotency Key</Label>
+            <Input
+              id="tx-idempotency-key"
+              type="text"
+              required
+              value={idempotencyKey}
+              onChange={(e) => setIdempotencyKey(e.target.value)}
+              placeholder="e.g. bank-ref-12345"
+            />
+          </div>
+        )}
+      </div>
+
+      {type === "payment" && !isSupervisor && (
+        <p className="text-xs text-muted-foreground">
+          Payments that exceed the remaining reserve require supervisor
+          approval.
+        </p>
+      )}
+
+      <Button type="submit" size="sm" disabled={isPending} className="self-start">
+        {isPending
+          ? "Recording…"
+          : `Record ${type === "payment" ? "Payment" : "Recovery"}`}
+      </Button>
+    </form>
+  );
+}
+
 export default function ClaimDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const utils = trpc.useUtils();
+  const { data: session } = useSession();
   const [actionError, setActionError] = useState<string | null>(null);
 
   const {
@@ -88,6 +195,30 @@ export default function ClaimDetailsPage() {
     },
     onError: (err) => {
       setActionError(err.message);
+    },
+  });
+
+  const settleClaim = trpc.claim.settleClaim.useMutation({
+    onSuccess: () => {
+      setActionError(null);
+      utils.claim.getClaim.invalidate({ claimId: id });
+      utils.claim.getClaims.invalidate();
+    },
+    onError: (err) => {
+      setActionError(err.message);
+    },
+  });
+
+  const [transactionError, setTransactionError] = useState<string | null>(
+    null,
+  );
+  const recordTransaction = trpc.claim.recordTransaction.useMutation({
+    onSuccess: () => {
+      setTransactionError(null);
+      utils.claim.getClaim.invalidate({ claimId: id });
+    },
+    onError: (err) => {
+      setTransactionError(err.message);
     },
   });
 
@@ -264,6 +395,80 @@ export default function ClaimDetailsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Reserve Metrics</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">Total Paid</dt>
+              <dd className="text-sm font-medium">
+                {formatAgorot(claim.reserveMetrics.paidToDateAgorot)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                Total Recoveries
+              </dt>
+              <dd className="text-sm font-medium">
+                {formatAgorot(claim.reserveMetrics.totalRecoveriesAgorot)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Net Incurred</dt>
+              <dd className="text-sm font-medium">
+                {formatAgorot(claim.reserveMetrics.netIncurredAgorot)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                Remaining Reserve
+              </dt>
+              <dd
+                className={cn(
+                  "text-sm font-medium",
+                  claim.reserveMetrics.remainingReserveAgorot < 0 &&
+                    "text-destructive",
+                )}
+              >
+                {formatAgorot(claim.reserveMetrics.remainingReserveAgorot)}
+              </dd>
+            </div>
+          </dl>
+
+          {(session?.user.role === "adjuster" ||
+            session?.user.role === "supervisor") &&
+            !claim.settledAt && (
+              <>
+                {transactionError && (
+                  <p className="text-sm text-destructive">
+                    {transactionError}
+                  </p>
+                )}
+                <RecordTransactionForm
+                  isPending={recordTransaction.isPending}
+                  isSupervisor={session?.user.role === "supervisor"}
+                  onSubmit={(input) =>
+                    input.type === "payment"
+                      ? recordTransaction.mutate({
+                          claimId: claim.id,
+                          type: "payment",
+                          amountAgorot: input.amountAgorot,
+                          idempotencyKey: input.idempotencyKey ?? "",
+                        })
+                      : recordTransaction.mutate({
+                          claimId: claim.id,
+                          type: "recovery",
+                          amountAgorot: input.amountAgorot,
+                        })
+                  }
+                />
+              </>
+            )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Documents</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -374,7 +579,27 @@ export default function ClaimDetailsPage() {
             </Button>
           )}
 
-          {!["intake", "triage", "assessment"].includes(claim.status) &&
+          {claim.status === "investigating" && (
+            <Button
+              size="sm"
+              disabled={settleClaim.isPending}
+              onClick={() =>
+                settleClaim.mutate({
+                  claimId: claim.id,
+                  version: claim.version,
+                })
+              }
+            >
+              {settleClaim.isPending ? "Settling…" : "Settle Claim"}
+            </Button>
+          )}
+
+          {![
+            "intake",
+            "triage",
+            "assessment",
+            "investigating",
+          ].includes(claim.status) &&
             !actionError && (
               <p className="text-sm text-muted-foreground">
                 No actions available from status &quot;{claim.status}&quot;

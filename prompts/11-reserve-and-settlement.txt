@@ -1,0 +1,10 @@
+Let's implement the core financial requirements for Reserve Management (FR-5) and Appendix-Only Ledger (FR-7).
+Create a tRPC procedure claim.recordTransaction in src/server/routers/claim.ts to log financial movements (Payments or Subrogation/Recoveries).
+RESERVE INVARIANT (FR-5): Inside this mutation, enforce the structural rule within a single database transaction: paid_to_date − recoveries + remaining_reserve == net_incurred.
+If a payment amount exceeds the remaining_reserve, check the user's session role. Reject the transaction with a FORBIDDEN error unless the user's role is strictly supervisor.
+APPEND-ONLY LEDGER (FR-7): Ensure that this operation only performs INSERT actions into a new financial_transactions table (or existing ledger). It must NEVER use UPDATE or DELETE on historical financial lines.
+Create the final settlement state transition mutation: claim.settleClaim. This transitions the claim from investigating to settled. Ensure it enforces that settlement can only happen once (FR-6).
+Update the UI page (src/app/dashboard/[id]/page.tsx):
+Display a clear summary card for the Reserve Metrics: Total Paid, Total Recoveries, Net Incurred, and Remaining Reserve.
+Add a clean inline form (visible to Adjusters/Supervisors) to record a new payment or recovery.
+Add the 'Settle Claim' button, visible only when the status is investigating.
