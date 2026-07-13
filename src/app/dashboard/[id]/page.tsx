@@ -293,6 +293,36 @@ export default function ClaimDetailsPage() {
       )
     : null;
 
+  // FR-7: the append-only financial ledger — payments, recoveries, and the
+  // running reserve balance after each — merged into a single, newest-first
+  // audit trail.
+  const auditEntries = [
+    ...claim.payments.map((payment) => ({
+      id: payment.id,
+      type: "payment" as const,
+      amountAgorot: payment.amountAgorot,
+      createdAt: payment.createdAt,
+      recordedByName: payment.recordedBy.name,
+      idempotencyKey: payment.idempotencyKey as string | null,
+    })),
+    ...claim.recoveries.map((recovery) => ({
+      id: recovery.id,
+      type: "recovery" as const,
+      amountAgorot: recovery.amountAgorot,
+      createdAt: recovery.createdAt,
+      recordedByName: recovery.recordedBy.name,
+      idempotencyKey: null as string | null,
+    })),
+    ...claim.reserves.map((reserve) => ({
+      id: reserve.id,
+      type: "reserve" as const,
+      amountAgorot: reserve.amountAgorot,
+      createdAt: reserve.createdAt,
+      recordedByName: reserve.recordedBy.name,
+      idempotencyKey: null as string | null,
+    })),
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
       <BackToDashboardLink />
@@ -516,10 +546,70 @@ export default function ClaimDetailsPage() {
         <CardHeader>
           <CardTitle>Audit Trail</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Audit trail coming soon.
-          </p>
+        <CardContent className="flex flex-col gap-3">
+          {auditEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No financial transactions recorded yet.
+            </p>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Recorded By</TableHead>
+                    <TableHead>Idempotency Key</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {auditEntries.map((entry) => (
+                    <TableRow key={`${entry.type}-${entry.id}`}>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                            entry.type === "payment" &&
+                              "bg-destructive/10 text-destructive",
+                            entry.type === "recovery" &&
+                              "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                            entry.type === "reserve" &&
+                              "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {entry.type === "payment"
+                            ? "Payment"
+                            : entry.type === "recovery"
+                              ? "Recovery"
+                              : "Reserve Balance"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatAgorot(entry.amountAgorot)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {entry.createdAt.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {entry.recordedByName}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {entry.idempotencyKey ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <p className="text-xs text-muted-foreground">
+                This ledger is append-only (FR-7): payments and recoveries
+                are individual movements; each &quot;Reserve Balance&quot;
+                row is the resulting remaining reserve immediately after the
+                transaction beside it — never edited or removed, only added
+                to.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
 

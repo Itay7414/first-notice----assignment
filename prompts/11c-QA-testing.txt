@@ -1,0 +1,1 @@
+Please create and run a quick temporary script to reset our seed claim (CLM-2026-0007) back to investigating status, and clear any financial transactions associated with it, so we can manually perform the Supervisor live QA test in the browser.

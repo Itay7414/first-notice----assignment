@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { getDepreciationRate } from "@/lib/depreciation-rates";
 import { apportionLimit, calculateACV } from "@/lib/money";
+import { isUploadThingConfigured } from "@/lib/uploadthing-config";
 import { protectedProcedure, router } from "../trpc";
 
 type ClaimStatus = (typeof claimStatusEnum.enumValues)[number];
@@ -34,6 +35,10 @@ const claimTransitionInput = z.object({
   // The version the client last saw, for optimistic concurrency: the write
   // is rejected if someone else has updated the claim in the meantime.
   version: z.number().int().positive(),
+});
+
+const simulateDocumentUploadInput = z.object({
+  claimId: z.string().uuid(),
 });
 
 const recordTransactionInput = z.discriminatedUnion("type", [
@@ -211,9 +216,9 @@ export const claimRouter = router({
           items: true,
           documents: { orderBy: (doc, { desc }) => desc(doc.createdAt) },
           policy: true,
-          reserves: true,
-          payments: true,
-          recoveries: true,
+          reserves: { with: { recordedBy: true } },
+          payments: { with: { recordedBy: true } },
+          recoveries: { with: { recordedBy: true } },
         },
       });
 
@@ -242,6 +247,56 @@ export const claimRouter = router({
         .returning();
 
       return claim;
+    }),
+
+  // Tells the client whether to show the "Simulate File Upload (Dev)"
+  // fallback: true whenever UPLOADTHING_TOKEN is missing/a placeholder, so
+  // local evaluation can still exercise the FR-2 guard below and the
+  // triage -> assessment transition without a real cloud token.
+  getUploadConfig: protectedProcedure.query(() => ({
+    useMockUpload: !isUploadThingConfigured(),
+  })),
+
+  // Dev-only stand-in for the real UploadThing flow in `onUploadComplete`
+  // (src/app/api/uploadthing/core.ts): inserts the same shape of `documents`
+  // row a real upload would produce, without needing cloud credentials.
+  // Refuses to run once a real token is configured, so it can't be used to
+  // bypass genuine document review in a real deployment.
+  simulateDocumentUpload: protectedProcedure
+    .input(simulateDocumentUploadInput)
+    .mutation(async ({ ctx, input }) => {
+      if (isUploadThingConfigured()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "UploadThing is configured for this environment; use the real upload flow instead of the dev mock.",
+        });
+      }
+
+      const claim = await ctx.db.query.claims.findFirst({
+        where: eq(claims.id, input.claimId),
+      });
+
+      if (!claim) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Claim ${input.claimId} not found`,
+        });
+      }
+
+      const [document] = await ctx.db
+        .insert(documents)
+        .values({
+          claimId: input.claimId,
+          fileKey: `mock-${crypto.randomUUID()}`,
+          fileName: "mock_document.pdf",
+          fileUrl: "https://example.com/mock_document.pdf",
+          docType: "other",
+          uploadedById: ctx.session.user.id,
+        })
+        .returning();
+
+      return document;
     }),
 
   // The first legal state-machine edge: intake -> triage.
@@ -381,6 +436,7 @@ export const claimRouter = router({
           await tx.insert(reserves).values({
             claimId: claim.id,
             amountAgorot: before.netIncurredAgorot,
+            recordedById: ctx.session.user.id,
           });
         }
 
@@ -390,6 +446,7 @@ export const claimRouter = router({
               claimId: claim.id,
               amountAgorot: input.amountAgorot,
               idempotencyKey: input.idempotencyKey,
+              recordedById: ctx.session.user.id,
             });
           } catch (error) {
             // Postgres unique_violation on (claimId, idempotencyKey): this
@@ -420,6 +477,7 @@ export const claimRouter = router({
           await tx.insert(recoveries).values({
             claimId: claim.id,
             amountAgorot: input.amountAgorot,
+            recordedById: ctx.session.user.id,
           });
         }
 
@@ -433,6 +491,7 @@ export const claimRouter = router({
         await tx.insert(reserves).values({
           claimId: claim.id,
           amountAgorot: newRemainingReserveAgorot,
+          recordedById: ctx.session.user.id,
         });
 
         const newPaidToDateAgorot =

@@ -1,0 +1,2 @@
+The financial transaction recording works perfectly, but the Audit Trail section in src/app/dashboard/[id]/page.tsx still shows a static 'Audit trail coming soon.' placeholder.
+Please update this section to properly fetch and display the immutable history of financial transactions (payments, recoveries, and reserves associated with this claim). It should render them as a clean list or table showing the transaction type, amount, date, user who recorded it, and the idempotency key, so that the FR-7 append-only ledger is fully visible in the UI before we settle the claim.

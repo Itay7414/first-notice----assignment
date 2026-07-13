@@ -188,6 +188,10 @@ export const reserves = pgTable("reserves", {
     .notNull()
     .references(() => claims.id),
   amountAgorot: integer("amount_agorot").notNull(),
+  // Who recorded the transaction that produced this balance (FR-7 audit trail).
+  recordedById: uuid("recorded_by_id")
+    .notNull()
+    .references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -202,6 +206,13 @@ export const payments = pgTable(
       .references(() => claims.id),
     amountAgorot: integer("amount_agorot").notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    // Who recorded this payment (FR-7 audit trail).
+    recordedById: uuid("recorded_by_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [
     unique("payments_claim_id_idempotency_key_unique").on(
@@ -217,6 +228,10 @@ export const recoveries = pgTable("recoveries", {
     .notNull()
     .references(() => claims.id),
   amountAgorot: integer("amount_agorot").notNull(),
+  // Who recorded this recovery (FR-7 audit trail).
+  recordedById: uuid("recorded_by_id")
+    .notNull()
+    .references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -294,11 +309,17 @@ export const documentsRelations = relations(documents, ({ one }) => ({
 
 // Explicit "one" side for the FR-5/FR-7 ledger tables, mirroring
 // documentsRelations above, so `with: { reserves: true, payments: true,
-// recoveries: true }` resolves reliably from the `claims` side.
+// recoveries: true }` resolves reliably from the `claims` side. Each of
+// these tables also has a second FK (recordedById -> users), so — just like
+// `documents` — the "one" side must be explicit for both relations.
 export const reservesRelations = relations(reserves, ({ one }) => ({
   claim: one(claims, {
     fields: [reserves.claimId],
     references: [claims.id],
+  }),
+  recordedBy: one(users, {
+    fields: [reserves.recordedById],
+    references: [users.id],
   }),
 }));
 
@@ -307,11 +328,19 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     fields: [payments.claimId],
     references: [claims.id],
   }),
+  recordedBy: one(users, {
+    fields: [payments.recordedById],
+    references: [users.id],
+  }),
 }));
 
 export const recoveriesRelations = relations(recoveries, ({ one }) => ({
   claim: one(claims, {
     fields: [recoveries.claimId],
     references: [claims.id],
+  }),
+  recordedBy: one(users, {
+    fields: [recoveries.recordedById],
+    references: [users.id],
   }),
 }));

@@ -1,0 +1,5 @@
+The error handling caught the missing UPLOADTHING_TOKEN perfectly in the UI actions banner!
+To make local evaluation and testing smooth without requiring a live cloud UploadThing token, let's add a fallback/mock inside our code.
+Look at where the file upload logic triggers the database insert or where the assessClaim mutation checks for documents.
+Modify the system so that if process.env.UPLOADTHING_TOKEN is missing or contains a placeholder, clicking the upload button (or a dedicated 'Simulate File Upload' dev button/checkbox next to it) will directly trigger a local tRPC mock action to insert a dummy row into the documents table for this claimId (e.g., filename: mock_document.pdf, type: application/pdf, uploadedBy: current user).
+This way, we can fully satisfy the FR-2 guard and test the status transition locally without cloud credentials.
