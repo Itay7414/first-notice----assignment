@@ -1,0 +1,9 @@
+We are successfully in the settled status! Let's implement the final phase of the application: Claim Finalization and Official Letter generation (FR-6, FR-8).
+In src/db/schema.ts, add a "finalized" option to the claim status enum if it's not already there.
+Create a tRPC mutation claim.finalizeClaim in src/server/routers/claim.ts that transitions a claim from settled to finalized.
+OFFICIAL LETTER REQUIREMENT (FR-8): When a claim is in finalized status, the UI page (src/app/dashboard/[id]/page.tsx) must display a dedicated, professional 'Official Settlement Summary Letter' component. This letter must:
+Be formatted cleanly (like a formal printable business letter or notice).
+List the final Net Incurred, Total Paid, and Remaining Reserve.
+Show a clear breakdown of each claim item with its final Apportioned Share calculated from our deterministic Hamilton algorithm, proving to the claimant exactly how their payout was derived.
+In the UI Actions section, add the 'Finalize Claim' button, which is strictly visible only when the claim status is settled. Clicking it should trigger the mutation with our standard optimistic concurrency pattern.
+Ensure that once a claim is finalized, all inputs and actions are permanently disabled or hidden, freezing the claim record forever.

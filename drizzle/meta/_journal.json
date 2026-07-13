@@ -43,6 +43,13 @@
       "when": 1783960599234,
       "tag": "0005_red_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783961178197,
+      "tag": "0006_lyrical_flatman",
+      "breakpoints": true
     }
   ]
 }

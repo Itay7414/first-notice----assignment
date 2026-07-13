@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { AccessDenied } from "@/components/access-denied";
 import { DocumentUploader } from "@/components/document-uploader";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -209,6 +209,17 @@ export default function ClaimDetailsPage() {
     },
   });
 
+  const finalizeClaim = trpc.claim.finalizeClaim.useMutation({
+    onSuccess: () => {
+      setActionError(null);
+      utils.claim.getClaim.invalidate({ claimId: id });
+      utils.claim.getClaims.invalidate();
+    },
+    onError: (err) => {
+      setActionError(err.message);
+    },
+  });
+
   const [transactionError, setTransactionError] = useState<string | null>(
     null,
   );
@@ -278,20 +289,22 @@ export default function ClaimDetailsPage() {
   );
   const perOccurrenceLimitAgorot = claim.policy.perOccurrenceLimitAgorot;
   const isOverLimit = totalAcvAgorot > perOccurrenceLimitAgorot;
+  const isFinalized = claim.status === "finalized";
 
-  // FR-3.2: only meaningful (and only shown) once the combined ACV actually
-  // exceeds the policy's per-occurrence limit.
-  const apportionedShareByItemId = isOverLimit
-    ? new Map(
-        apportionLimit(
-          itemsWithAcv.map((item) => ({
-            id: item.id,
-            acv: BigInt(item.acvAgorot),
-          })),
-          BigInt(perOccurrenceLimitAgorot),
-        ).map((share) => [share.id, Number(share.shareAgorot)]),
-      )
-    : null;
+  // FR-3.2: each item's final apportioned share. When the combined ACV fits
+  // within the policy limit, `apportionLimit` hands every item back its
+  // full ACV unchanged — so this is always the item's true final payout,
+  // not just a when-over-limit special case (the settlement letter below
+  // relies on that).
+  const apportionedShareByItemId = new Map(
+    apportionLimit(
+      itemsWithAcv.map((item) => ({
+        id: item.id,
+        acv: BigInt(item.acvAgorot),
+      })),
+      BigInt(perOccurrenceLimitAgorot),
+    ).map((share) => [share.id, Number(share.shareAgorot)]),
+  );
 
   // FR-7: the append-only financial ledger — payments, recoveries, and the
   // running reserve balance after each — merged into a single, newest-first
@@ -325,9 +338,11 @@ export default function ClaimDetailsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
-      <BackToDashboardLink />
+      <div className="print:hidden">
+        <BackToDashboardLink />
+      </div>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Claim {claim.claimRef}</CardTitle>
         </CardHeader>
@@ -357,7 +372,7 @@ export default function ClaimDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Claim Items</CardTitle>
         </CardHeader>
@@ -423,7 +438,7 @@ export default function ClaimDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Reserve Metrics</CardTitle>
         </CardHeader>
@@ -497,7 +512,7 @@ export default function ClaimDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Documents</CardTitle>
         </CardHeader>
@@ -529,20 +544,27 @@ export default function ClaimDetailsPage() {
             </ul>
           )}
 
-          <DocumentUploader
-            claimId={claim.id}
-            onUploadComplete={() => {
-              setActionError(null);
-              utils.claim.getClaim.invalidate({ claimId: id });
-            }}
-            onUploadError={(message) => {
-              setActionError(message);
-            }}
-          />
+          {claim.settledAt ? (
+            <p className="text-xs text-muted-foreground">
+              This claim has been settled — its documents are frozen and no
+              further uploads are accepted.
+            </p>
+          ) : (
+            <DocumentUploader
+              claimId={claim.id}
+              onUploadComplete={() => {
+                setActionError(null);
+                utils.claim.getClaim.invalidate({ claimId: id });
+              }}
+              onUploadError={(message) => {
+                setActionError(message);
+              }}
+            />
+          )}
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Audit Trail</CardTitle>
         </CardHeader>
@@ -613,7 +635,7 @@ export default function ClaimDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader>
           <CardTitle>Actions</CardTitle>
         </CardHeader>
@@ -684,11 +706,35 @@ export default function ClaimDetailsPage() {
             </Button>
           )}
 
+          {claim.status === "settled" && (
+            <Button
+              size="sm"
+              disabled={finalizeClaim.isPending}
+              onClick={() =>
+                finalizeClaim.mutate({
+                  claimId: claim.id,
+                  version: claim.version,
+                })
+              }
+            >
+              {finalizeClaim.isPending ? "Finalizing…" : "Finalize Claim"}
+            </Button>
+          )}
+
+          {isFinalized && !actionError && (
+            <p className="text-sm text-muted-foreground">
+              This claim is finalized. Its record is now permanently frozen
+              — see the Official Settlement Summary Letter below.
+            </p>
+          )}
+
           {![
             "intake",
             "triage",
             "assessment",
             "investigating",
+            "settled",
+            "finalized",
           ].includes(claim.status) &&
             !actionError && (
               <p className="text-sm text-muted-foreground">
@@ -698,6 +744,158 @@ export default function ClaimDetailsPage() {
             )}
         </CardContent>
       </Card>
+
+      {isFinalized && (
+        <Card className="border-2 print:border-0 print:shadow-none">
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <CardTitle>Official Settlement Summary Letter</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 print:hidden"
+              onClick={() => window.print()}
+            >
+              <Printer className="size-4" />
+              Print Letter
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <article className="mx-auto flex max-w-2xl flex-col gap-6 font-serif text-sm leading-relaxed text-foreground">
+              <header className="flex flex-col gap-1 border-b pb-4">
+                <p className="text-lg font-semibold">FirstNotice Claims</p>
+                <p className="text-xs text-muted-foreground">
+                  Claims Department · Official Correspondence
+                </p>
+              </header>
+
+              <p className="text-right text-xs text-muted-foreground">
+                {(claim.finalizedAt ?? new Date()).toLocaleDateString(
+                  "en-US",
+                  { year: "numeric", month: "long", day: "numeric" },
+                )}
+              </p>
+
+              <div>
+                <p>Dear {claim.claimant.name},</p>
+              </div>
+
+              <p>
+                Re: <strong>Claim {claim.claimRef}</strong> — Official
+                Settlement Summary
+              </p>
+
+              <p>
+                This letter confirms that the above-referenced claim, filed
+                for a loss occurring on {claim.dateOfLoss}, has been fully
+                reviewed, settled, and finalized. The final financial
+                disposition of the claim is summarized below.
+              </p>
+
+              <section className="flex flex-col gap-2 rounded-md border p-4">
+                <p className="font-semibold">Financial Summary</p>
+                <dl className="grid grid-cols-3 gap-4">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Net Incurred
+                    </dt>
+                    <dd className="font-medium">
+                      {claim.currency}{" "}
+                      {formatAgorot(claim.reserveMetrics.netIncurredAgorot)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Total Paid
+                    </dt>
+                    <dd className="font-medium">
+                      {claim.currency}{" "}
+                      {formatAgorot(claim.reserveMetrics.paidToDateAgorot)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Remaining Reserve
+                    </dt>
+                    <dd className="font-medium">
+                      {claim.currency}{" "}
+                      {formatAgorot(
+                        claim.reserveMetrics.remainingReserveAgorot,
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="flex flex-col gap-2">
+                <p className="font-semibold">Breakdown by Claimed Item</p>
+                <p className="text-xs text-muted-foreground">
+                  Each item&apos;s final payout below is its actual cash
+                  value (replacement cost less depreciation), apportioned
+                  against the policy&apos;s per-occurrence limit using a
+                  deterministic Largest-Remainder (Hamilton) allocation.
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">
+                        Claimed (RCV)
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Depreciation
+                      </TableHead>
+                      <TableHead className="text-right">ACV</TableHead>
+                      <TableHead className="text-right">
+                        Final Payout
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {itemsWithAcv.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="capitalize">
+                          {item.category}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatAgorot(item.claimedAgorot)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatAgorot(item.depreciationAgorot)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatAgorot(item.acvAgorot)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatAgorot(
+                            apportionedShareByItemId.get(item.id) ?? 0,
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </section>
+
+              <p>
+                This settlement is final. No further payments, recoveries,
+                or amendments will be made against this claim. Please retain
+                this letter for your records.
+              </p>
+
+              <footer className="flex flex-col gap-1 border-t pt-4">
+                <p>Sincerely,</p>
+                <p className="font-semibold">FirstNotice Claims Department</p>
+                <p className="text-xs text-muted-foreground">
+                  This is a system-generated summary of claim {claim.claimRef}
+                  , finalized on{" "}
+                  {(claim.finalizedAt ?? new Date()).toLocaleString()}.
+                </p>
+              </footer>
+            </article>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

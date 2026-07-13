@@ -216,6 +216,7 @@ export const claimRouter = router({
           items: true,
           documents: { orderBy: (doc, { desc }) => desc(doc.createdAt) },
           policy: true,
+          claimant: true,
           reserves: { with: { recordedBy: true } },
           payments: { with: { recordedBy: true } },
           recoveries: { with: { recordedBy: true } },
@@ -281,6 +282,14 @@ export const claimRouter = router({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: `Claim ${input.claimId} not found`,
+        });
+      }
+
+      if (claim.settledAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "This claim has already been settled; its record is frozen.",
         });
       }
 
@@ -352,6 +361,28 @@ export const claimRouter = router({
           }
         },
         extraFields: { settledAt: new Date() },
+      }),
+    ),
+
+  // settled -> finalized. FR-6/FR-8: the terminal, one-way edge — once
+  // finalized, the claim record is frozen forever (no further state
+  // transitions or financial transactions; every other mutation's status
+  // guard already rejects a "finalized" claim, since none of them expect
+  // "finalized" as their `from` state). Guarded the same way as
+  // `settleClaim`: the status check plus a defensive `finalizedAt` check.
+  finalizeClaim: protectedProcedure
+    .input(claimTransitionInput)
+    .mutation(async ({ ctx, input }) =>
+      transitionClaim(ctx.db, input, "settled", "finalized", {
+        guard: async (claim) => {
+          if (claim.finalizedAt) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "This claim has already been finalized (FR-6).",
+            });
+          }
+        },
+        extraFields: { finalizedAt: new Date() },
       }),
     ),
 

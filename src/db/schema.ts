@@ -24,6 +24,7 @@ export const claimStatusEnum = pgEnum("claim_status", [
   "assessment",
   "investigating",
   "settled",
+  "finalized",
   "approved",
   "denied",
   "paid",
@@ -169,6 +170,9 @@ export const claims = pgTable("claims", {
   version: integer("version").notNull().default(1),
   // Nullable; set exactly once to enforce a single settlement per claim.
   settledAt: timestamp("settled_at", { withTimezone: true }),
+  // Nullable; set exactly once (FR-6). Once set, the claim record is frozen
+  // forever — no further financial transactions or state transitions.
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
 });
 
 export const claimItems = pgTable("claim_items", {
