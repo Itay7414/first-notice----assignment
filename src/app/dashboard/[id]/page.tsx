@@ -294,6 +294,18 @@ export default function ClaimDetailsPage() {
   // the card hidden until "triage" (and onward) keeps the page's visual
   // flow matching the state machine during a walkthrough/demo.
   const showDocuments = claim.status !== "intake";
+  // Financial transactions don't make sense until the claim has actually
+  // reached investigation — hide the payment/recovery inputs entirely
+  // (not just visually) during intake/triage/assessment so early-stage
+  // claims can't be mistaken for ones ready for money movement.
+  const showTransactionForm = claim.status === "investigating";
+  // Net amount actually paid out by the insurer (gross payments minus
+  // subrogation recoveries). This is what the official letter shows as
+  // "Total Paid" so it reconciles exactly with the reserve invariant:
+  // netPaid + remainingReserve == netIncurred.
+  const netPaidAgorot =
+    claim.reserveMetrics.paidToDateAgorot -
+    claim.reserveMetrics.totalRecoveriesAgorot;
 
   // FR-3.2: each item's final apportioned share. When the combined ACV fits
   // within the policy limit, `apportionLimit` hands every item back its
@@ -486,7 +498,8 @@ export default function ClaimDetailsPage() {
 
           {(session?.user.role === "adjuster" ||
             session?.user.role === "supervisor") &&
-            !claim.settledAt && (
+            !claim.settledAt &&
+            showTransactionForm && (
               <>
                 {transactionError && (
                   <p className="text-sm text-destructive">
@@ -812,11 +825,10 @@ export default function ClaimDetailsPage() {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">
-                      Total Paid
+                      Total Paid (Net of Recoveries)
                     </dt>
                     <dd className="font-medium">
-                      {claim.currency}{" "}
-                      {formatAgorot(claim.reserveMetrics.paidToDateAgorot)}
+                      {claim.currency} {formatAgorot(netPaidAgorot)}
                     </dd>
                   </div>
                   <div>
