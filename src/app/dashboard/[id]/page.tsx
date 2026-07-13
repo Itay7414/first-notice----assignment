@@ -290,6 +290,10 @@ export default function ClaimDetailsPage() {
   const perOccurrenceLimitAgorot = claim.policy.perOccurrenceLimitAgorot;
   const isOverLimit = totalAcvAgorot > perOccurrenceLimitAgorot;
   const isFinalized = claim.status === "finalized";
+  // Documents aren't relevant until the claim has left "intake" — keeping
+  // the card hidden until "triage" (and onward) keeps the page's visual
+  // flow matching the state machine during a walkthrough/demo.
+  const showDocuments = claim.status !== "intake";
 
   // FR-3.2: each item's final apportioned share. When the combined ACV fits
   // within the policy limit, `apportionLimit` hands every item back its
@@ -512,57 +516,59 @@ export default function ClaimDetailsPage() {
         </CardContent>
       </Card>
 
-      <Card className="print:hidden">
-        <CardHeader>
-          <CardTitle>Documents</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {claim.documents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No documents attached yet.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {claim.documents.map((document) => (
-                <li
-                  key={document.id}
-                  className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                >
-                  <a
-                    href={document.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate underline hover:no-underline"
+      {showDocuments && (
+        <Card className="print:hidden">
+          <CardHeader>
+            <CardTitle>Documents</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {claim.documents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No documents attached yet.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {claim.documents.map((document) => (
+                  <li
+                    key={document.id}
+                    className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                   >
-                    {document.fileName}
-                  </a>
-                  <span className="ml-3 shrink-0 text-xs text-muted-foreground capitalize">
-                    {document.docType}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+                    <a
+                      href={document.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate underline hover:no-underline"
+                    >
+                      {document.fileName}
+                    </a>
+                    <span className="ml-3 shrink-0 text-xs text-muted-foreground capitalize">
+                      {document.docType}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          {claim.settledAt ? (
-            <p className="text-xs text-muted-foreground">
-              This claim has been settled — its documents are frozen and no
-              further uploads are accepted.
-            </p>
-          ) : (
-            <DocumentUploader
-              claimId={claim.id}
-              onUploadComplete={() => {
-                setActionError(null);
-                utils.claim.getClaim.invalidate({ claimId: id });
-              }}
-              onUploadError={(message) => {
-                setActionError(message);
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+            {claim.settledAt ? (
+              <p className="text-xs text-muted-foreground">
+                This claim has been settled — its documents are frozen and no
+                further uploads are accepted.
+              </p>
+            ) : (
+              <DocumentUploader
+                claimId={claim.id}
+                onUploadComplete={() => {
+                  setActionError(null);
+                  utils.claim.getClaim.invalidate({ claimId: id });
+                }}
+                onUploadError={(message) => {
+                  setActionError(message);
+                }}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="print:hidden">
         <CardHeader>

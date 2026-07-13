@@ -1,0 +1,1 @@
+In src/app/dashboard/[id]/page.tsx, please wrap the Documents card component so that it is completely hidden from the UI when the claim status is intake. It should only become visible starting from the triage status and onward, making the UI transitions cleaner during the evaluation.

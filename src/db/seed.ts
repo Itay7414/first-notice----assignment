@@ -1,7 +1,17 @@
 import { eq } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { db } from "./index";
-import { accounts, claimItems, claims, policies, users } from "./schema";
+import {
+  accounts,
+  claimItems,
+  claims,
+  documents,
+  payments,
+  policies,
+  recoveries,
+  reserves,
+  users,
+} from "./schema";
 
 // Shared test password for every seeded account (this is synthetic seed
 // data only — see the assignment's note against real credentials).
@@ -39,8 +49,30 @@ async function ensureCredentialAccount(userId: string) {
   return created;
 }
 
+// Wipes every claim-scoped table so the seed is fully repeatable: rerunning
+// `npm run db:seed` always resets CLM-2026-0007 back to a clean "intake"
+// claim (version 1) with an empty ledger, no matter what state a prior
+// manual QA/demo session left it in. Users, accounts, and the policy are
+// left alone (upserted, not recreated) — only claims and everything that
+// hangs off a claim are cleared. Deletion order respects FK references to
+// `claims` (ledger/document children first, then the claim itself).
+async function resetClaimData() {
+  await db.delete(payments);
+  await db.delete(recoveries);
+  await db.delete(reserves);
+  await db.delete(documents);
+  await db.delete(claimItems);
+  await db.delete(claims);
+
+  console.log(
+    "Cleared existing payments, recoveries, reserves, documents, claim items, and claims.",
+  );
+}
+
 async function seed() {
   console.log("Seeding database...");
+
+  await resetClaimData();
 
   const supervisor = await upsertUser({
     name: "Dana Cohen",
@@ -94,58 +126,49 @@ async function seed() {
 
   console.log("Policy:", policy);
 
-  let claim = await db.query.claims.findFirst({
-    where: eq(claims.claimRef, "CLM-2026-0007"),
-  });
-  let isNewClaim = false;
-
-  if (!claim) {
-    isNewClaim = true;
-    [claim] = await db
-      .insert(claims)
-      .values({
-        claimRef: "CLM-2026-0007",
-        claimantId: claimant.id,
-        policyId: policy.id,
-        currency: "ILS",
-        dateOfLoss: "2026-06-10",
-        status: "intake",
-        version: 1,
-      })
-      .returning();
-  }
+  // Claims (and everything that hangs off them) were just wiped by
+  // `resetClaimData`, so this is always a fresh insert — no existence
+  // check needed, and the claim always starts at a clean "intake"/version 1.
+  const [claim] = await db
+    .insert(claims)
+    .values({
+      claimRef: "CLM-2026-0007",
+      claimantId: claimant.id,
+      policyId: policy.id,
+      currency: "ILS",
+      dateOfLoss: "2026-06-10",
+      status: "intake",
+      version: 1,
+    })
+    .returning();
 
   console.log("Claim:", claim);
 
-  if (isNewClaim) {
-    const items = await db
-      .insert(claimItems)
-      .values([
-        {
-          claimId: claim.id,
-          category: "electronics",
-          ageMonths: 30,
-          claimedAgorot: 1200000,
-        },
-        {
-          claimId: claim.id,
-          category: "furniture",
-          ageMonths: 60,
-          claimedAgorot: 900000,
-        },
-        {
-          claimId: claim.id,
-          category: "appliance",
-          ageMonths: 18,
-          claimedAgorot: 500000,
-        },
-      ])
-      .returning();
+  const items = await db
+    .insert(claimItems)
+    .values([
+      {
+        claimId: claim.id,
+        category: "electronics",
+        ageMonths: 30,
+        claimedAgorot: 1200000,
+      },
+      {
+        claimId: claim.id,
+        category: "furniture",
+        ageMonths: 60,
+        claimedAgorot: 900000,
+      },
+      {
+        claimId: claim.id,
+        category: "appliance",
+        ageMonths: 18,
+        claimedAgorot: 500000,
+      },
+    ])
+    .returning();
 
-    console.log("Created claim items:", items);
-  } else {
-    console.log("Claim items already exist, skipping.");
-  }
+  console.log("Created claim items:", items);
 
   console.log("Seed complete.");
 }

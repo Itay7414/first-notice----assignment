@@ -1,0 +1,3 @@
+Please modify our main seed file `src/db/seed.ts` so that every time we run `npm run db:seed`, it completely clears/deletes the existing ledger data (payments, recoveries, reserves, claim_items, documents, and claims) before inserting the fresh data. 
+
+This will ensure that running `npm run db:seed` always resets claim `CLM-2026-0007` back to a clean, original `intake` status (Version 1) with an empty ledger, allowing me to perform a repeatable live presentation for the examiners. Please execute the updated seed script right after modifying it.
